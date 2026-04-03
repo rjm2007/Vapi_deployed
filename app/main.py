@@ -24,8 +24,12 @@ def health():
 
 @app.middleware("http")
 async def verify_vapi_secret(request: Request, call_next):
-    """Reject POST requests that don't carry the correct x-vapi-secret header."""
-    if request.method == "POST" and VAPI_SERVER_SECRET:
+    """Validate x-vapi-secret on /vapi-webhook only.
+    VAPI reliably sends server.secret as x-vapi-secret for assistant webhooks.
+    Tool call endpoints are left open — VAPI does not forward custom headers
+    defined in apiRequest tool headers.properties.
+    """
+    if request.method == "POST" and request.url.path == "/vapi-webhook" and VAPI_SERVER_SECRET:
         incoming = request.headers.get("x-vapi-secret", "")
         if not hmac.compare_digest(incoming, VAPI_SERVER_SECRET):
             return JSONResponse(status_code=401, content={"error": "Unauthorized"})
