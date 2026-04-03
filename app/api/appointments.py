@@ -148,23 +148,9 @@ async def create_appointment(request: Request):
                 )
             logger.info("[%s] STEP 1b RESULT → CreatePatient SUCCESS | patientId=%s", rid, patient_id)
 
-        # ── Step 1c: Server-side slot guard ──
-        logger.info("[%s] STEP 1c → Slot pre-check date=%s time=%s location=%s", rid, date, time_str, tebra_name)
-        pre_xml = await call_tebra_get_appointments(date, tebra_name)
-        if "<IsError>true</IsError>" not in pre_xml:
-            booked_now = parse_booked_slots(pre_xml, date)
-            if (parsed_time[0], parsed_time[1]) in booked_now:
-                available_now = get_available_slots(booked_now)
-                nearest       = get_nearest_available_slots(parsed_time[0], parsed_time[1], available_now)
-                slots_str     = ", ".join(nearest) if nearest else "no other slots today"
-                logger.warning("[%s] STEP 1c SLOT CONFLICT: %s is already booked at %s. Nearest: %s",
-                               rid, time_str, location, slots_str)
-                return build_vapi_response(
-                    tool_call_id,
-                    f"Sorry, {format_12hr(parsed_time[0], parsed_time[1])} is already taken at {location}. "
-                    f"Please ask the patient which of these works: {slots_str}."
-                )
-        logger.info("[%s] STEP 1c RESULT → Slot is free, proceeding to book", rid)
+        # Step 1c (slot pre-check) removed — saved ~3s but caused VAPI ECONNRESET.
+        # check_availability already verified the slot seconds before this call.
+        logger.info("[%s] STEP 1c → skipped (slot already verified by check_availability)", rid)
 
         # ── Step 2: Create appointment in Tebra (with one retry) ──
         logger.info("[%s] STEP 2 → CreateAppointment (patientId=%s date=%s time=%s location=%s)",
