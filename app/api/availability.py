@@ -78,9 +78,10 @@ async def check_availability(request: Request):
             if not available:
                 message = f"Sorry, there are no available slots on {date} at {location}."
             else:
-                slots_str = ", ".join(format_12hr(h, mn) for h, mn in available)
+                ranges_str = ", then ".join(get_free_ranges(available))
                 message = (
-                    f"Available slots on {date} at {location}: {slots_str}."
+                    f"Available slots on {date} at {location}: {ranges_str} "
+                    f"— all in 30-minute intervals."
                 )
         else:
             h, mn = requested_time
