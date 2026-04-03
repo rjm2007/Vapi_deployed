@@ -321,7 +321,26 @@ async def vapi_webhook(request: Request):
         old_attempts = lead.get("call_attempts") or 0
         new_attempts = old_attempts + 1
 
-        if ended_reason == "customer-did-not-answer":
+        # ── Smart fallback: check if an appointment was created ──
+        has_appointment = False
+        if ended_reason in ("customer-ended-call", "assistant-ended-call"):
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    appt_r = await client.get(
+                        f"{SUPABASE_URL}/rest/v1/appointments?lead_id=eq.{lead_id}"
+                        f"&status=eq.scheduled&select=id&limit=1",
+                        headers=SUPABASE_HEADERS,
+                    )
+                    if appt_r.status_code == 200 and appt_r.json():
+                        has_appointment = True
+                        logger.info("[%s] vapi-webhook fallback — appointment found for lead %s, marking booked", rid, lead_id)
+            except Exception:
+                pass
+
+        if has_appointment:
+            queue_status = "complete"
+            lead_outcome = "booked"
+        elif ended_reason == "customer-did-not-answer":
             queue_status = "new" if new_attempts < 3 else "manual_follow_up"
             lead_outcome = "no_answer" if new_attempts < 3 else "manual"
         elif ended_reason in ("customer-ended-call", "assistant-ended-call"):
