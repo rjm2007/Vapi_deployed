@@ -1,7 +1,7 @@
 import httpx
 from datetime import datetime
 
-from app.core.config import SUPABASE_URL, SUPABASE_HEADERS
+from app.core.config import SUPABASE_URL, SUPABASE_HEADERS, SUPABASE_PRACTICE_ID
 from app.core.logger import logger
 
 
@@ -110,6 +110,7 @@ async def _insert_call_log(
             "call_direction":   call_direction,
             "outcome":          outcome,
             "notes":            notes,
+            "practice_id":      SUPABASE_PRACTICE_ID,
         }
         if appointment_id:
             data["appointment_id"] = appointment_id
@@ -131,3 +132,45 @@ async def _insert_call_log(
     except Exception as e:
         logger.error("[%s] call_log INSERT exception: %s", rid, e)
         return False
+
+
+async def supabase_insert_scheduled_callback(data: dict) -> dict | None:
+    """Insert a row into scheduled_callbacks. Returns inserted row or None."""
+    try:
+        data.setdefault("practice_id", SUPABASE_PRACTICE_ID)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{SUPABASE_URL}/rest/v1/scheduled_callbacks",
+                headers=SUPABASE_HEADERS,
+                json=data,
+            )
+            if r.status_code in (200, 201):
+                rows = r.json()
+                return rows[0] if rows else None
+            logger.error("[supabase] insert_scheduled_callback failed status=%s body=%s",
+                         r.status_code, r.text)
+            return None
+    except Exception as e:
+        logger.error("[supabase] insert_scheduled_callback exception: %s", e)
+        return None
+
+
+async def supabase_insert_notification_log(data: dict) -> dict | None:
+    """Insert a row into notification_log. Returns inserted row or None."""
+    try:
+        data.setdefault("practice_id", SUPABASE_PRACTICE_ID)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{SUPABASE_URL}/rest/v1/notification_log",
+                headers=SUPABASE_HEADERS,
+                json=data,
+            )
+            if r.status_code in (200, 201):
+                rows = r.json()
+                return rows[0] if rows else None
+            logger.error("[supabase] insert_notification_log failed status=%s body=%s",
+                         r.status_code, r.text)
+            return None
+    except Exception as e:
+        logger.error("[supabase] insert_notification_log exception: %s", e)
+        return None

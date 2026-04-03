@@ -14,6 +14,7 @@ from app.core.logger import logger
 from app.services.supabase_service import (
     supabase_update_lead,
     supabase_update_appointment,
+    supabase_insert_scheduled_callback,
     _insert_call_log,
 )
 from app.utils.parser import build_vapi_response
@@ -79,7 +80,7 @@ async def update_lead_status(request: Request):
 
         # ── Idempotency: skip duplicate update if already in terminal state ──
         current_qs = current_lead.get("queue_status")
-        if current_qs in ("complete", "follow_up", "manual_follow_up") and current_qs == queue_status:
+        if current_qs in ("complete", "not_interested", "follow_up", "manual_follow_up") and current_qs == queue_status:
             logger.info("[%s] update-lead-status SKIP duplicate — lead already %s", rid, current_qs)
             return build_vapi_response(
                 tool_call_id,
@@ -93,6 +94,9 @@ async def update_lead_status(request: Request):
             update_data["queue_status"]   = queue_status
         if lead_outcome:
             update_data["lead_outcome"]   = lead_outcome
+            # Auto-set queue_status for not_interested if VAPI didn't specify
+            if lead_outcome == "not_interested" and not queue_status:
+                update_data["queue_status"] = "not_interested"
         if callback_requested_at:
             update_data["callback_requested_at"] = callback_requested_at
         if callback_notes:
@@ -101,6 +105,15 @@ async def update_lead_status(request: Request):
             update_data["tebra_patient_id"] = tebra_patient_id
         if notes:
             update_data["notes"]          = notes
+
+        # ── Insert scheduled callback if requested ──
+        if callback_requested_at and lead_id:
+            await supabase_insert_scheduled_callback({
+                "lead_id":        lead_id,
+                "scheduled_for":  callback_requested_at,
+                "assistant_type": "lead",
+                "notes":          callback_notes,
+            })
 
         # ── Increment call_attempts ──
         try:
@@ -159,11 +172,12 @@ async def update_reminder_outcome(request: Request):
         outcome        = args.get("outcome")
         notes          = args.get("notes")
         lead_id        = args.get("lead_id")
+        reminder_type  = args.get("reminder_type", "24hr")  # "24hr" or "2hr"
 
         if not appointment_id:
             return build_vapi_response(tool_call_id, "Missing appointment_id. Cannot update reminder outcome.")
 
-        valid_outcomes = {"confirmed", "cancelled", "rescheduled", "no_answer", "voicemail"}
+        valid_outcomes = {"confirmed", "cancelled", "rescheduled", "no_answer"}
         if not outcome or outcome.lower() not in valid_outcomes:
             return build_vapi_response(
                 tool_call_id,
@@ -172,21 +186,21 @@ async def update_reminder_outcome(request: Request):
         outcome = outcome.lower()
 
         # ── Build appointment update payload ──
+        outcome_col = "reminder_24hr_outcome" if reminder_type == "24hr" else "reminder_2hr_outcome"
         appt_update: dict = {
-            "reminder_outcome": outcome,
-            "updated_at":       datetime.utcnow().isoformat(),
+            outcome_col:  outcome,
+            "updated_at": datetime.utcnow().isoformat(),
         }
-        if notes:
-            appt_update["reminder_notes"] = notes
 
         status_map = {
             "confirmed":   "confirmed",
             "cancelled":   "cancelled",
             "rescheduled": "rescheduled",
             "no_answer":   "scheduled",
-            "voicemail":   "scheduled",
         }
         appt_update["status"] = status_map[outcome]
+        if outcome == "cancelled":
+            appt_update["cancelled_at"] = datetime.utcnow().isoformat()
 
         success = await supabase_update_appointment(appointment_id, appt_update)
 
@@ -202,8 +216,8 @@ async def update_reminder_outcome(request: Request):
         if lead_id and success:
             lead_update = {"updated_at": datetime.utcnow().isoformat()}
             if outcome == "cancelled":
-                lead_update["lead_outcome"] = "cancelled"
-                lead_update["queue_status"] = "complete"
+                lead_update["lead_outcome"] = "not_interested"
+                lead_update["queue_status"] = "not_interested"
             elif outcome == "confirmed":
                 lead_update["lead_outcome"] = "booked"
             await supabase_update_lead(lead_id, lead_update)
@@ -288,7 +302,7 @@ async def vapi_webhook(request: Request):
         call_type_log = "outbound_reminder" if assistant_id == VAPI_REMINDER_ASSISTANT_ID else "outbound_new_lead"
 
         # If already in a terminal state, just log the call
-        if current_qs in ("complete", "follow_up", "manual_follow_up"):
+        if current_qs in ("complete", "not_interested", "follow_up", "manual_follow_up"):
             logger.info("[%s] vapi-webhook — lead already %s, inserting call_log only", rid, current_qs)
             await _insert_call_log(
                 rid=rid,

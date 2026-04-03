@@ -11,6 +11,7 @@ from app.core.config import (
     resolve_appointment_reason_id,
     SUPABASE_URL,
     SUPABASE_HEADERS,
+    SUPABASE_PRACTICE_ID,
     LOCATION_MAP,
     TEBRA_VALID_NAMES,
 )
@@ -199,6 +200,7 @@ async def create_appointment(request: Request):
                 "patient_name":              name,
                 "patient_phone":             phone,
                 "status":                    "scheduled",
+                "practice_id":               SUPABASE_PRACTICE_ID,
             }
             if lead_id:
                 appt_data["lead_id"] = lead_id
@@ -501,6 +503,8 @@ async def reschedule_appointment(request: Request):
             "appointment_date":          new_date,
             "appointment_time":          time_normalized,
             "status":                    "scheduled",
+            "practice_id":               SUPABASE_PRACTICE_ID,
+            "rescheduled_from_id":       appointment_id,
             "service":                   new_service or (old_sb_appt.get("service") if old_sb_appt else None),
             "location":                  new_location or (old_sb_appt.get("location") if old_sb_appt else None),
             "patient_name":              old_sb_appt.get("patient_name") if old_sb_appt else None,

@@ -18,10 +18,12 @@ RESOURCE_ID = os.getenv("RESOURCE_ID", "1")
 # ─── VAPI Assistant IDs ───────────────────────────────────────────────────────
 VAPI_LEAD_ASSISTANT_ID     = os.getenv("VAPI_LEAD_ASSISTANT_ID",     "a4fef714-66cf-4dd5-869c-5f2ebe4cadf0")
 VAPI_REMINDER_ASSISTANT_ID = os.getenv("VAPI_REMINDER_ASSISTANT_ID", "cdee681d-59d6-47a6-b222-a22827c62e3e")
+VAPI_SERVER_SECRET         = os.getenv("VAPI_SERVER_SECRET")
 
 # ─── Supabase Config ──────────────────────────────────────────────────────────
-SUPABASE_URL     = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+SUPABASE_URL         = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY     = os.getenv("SUPABASE_API_KEY")
+SUPABASE_PRACTICE_ID = os.getenv("SUPABASE_PRACTICE_ID", "0ff191f3-0d09-4b43-ae7e-7515bae3f410")  # Rausch PT
 SUPABASE_HEADERS = {
     "apikey":        SUPABASE_API_KEY,
     "Authorization": f"Bearer {SUPABASE_API_KEY}",
