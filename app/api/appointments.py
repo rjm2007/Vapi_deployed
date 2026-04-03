@@ -130,6 +130,33 @@ async def create_appointment(request: Request):
         logger.info("[%s]   lead_id      : %s", rid, lead_id)
         logger.info("[%s] ────────────────────────────────────────────────────────", rid)
 
+        # ── Dedup guard: if appointment already exists for this lead+date+time, return it ──
+        if lead_id:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as dup_client:
+                    dup_r = await dup_client.get(
+                        f"{SUPABASE_URL}/rest/v1/appointments"
+                        f"?lead_id=eq.{lead_id}&appointment_date=eq.{date}"
+                        f"&appointment_time=eq.{time_normalized}&status=eq.scheduled"
+                        f"&select=id,tebra_appointment_id&limit=1",
+                        headers=SUPABASE_HEADERS,
+                    )
+                    if dup_r.status_code == 200 and dup_r.json():
+                        existing = dup_r.json()[0]
+                        logger.info(
+                            "[%s] DEDUP → appointment already exists supabase=%s tebra=%s — returning existing",
+                            rid, existing["id"], existing["tebra_appointment_id"],
+                        )
+                        msg = (
+                            f"Appointment booked successfully! "
+                            f"{name} is scheduled for {service} at {location} "
+                            f"on {date} at {format_12hr(parsed_time[0], parsed_time[1])}. "
+                            f"appointment_id:{existing['id']} tebra_id:{existing['tebra_appointment_id']}"
+                        )
+                        return build_vapi_response(tool_call_id, msg)
+            except Exception as dup_err:
+                logger.warning("[%s] DEDUP check failed (continuing): %s", rid, dup_err)
+
         # ── Step 1: Find or create patient ──
         logger.info("[%s] STEP 1 → GetPatients (looking up %s %s)", rid, first_name, last_name)
         patient_id = await get_patient_by_name(first_name, last_name, rid)
