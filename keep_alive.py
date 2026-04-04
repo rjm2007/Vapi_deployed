@@ -16,7 +16,7 @@ import time
 import urllib.request
 
 RENDER_URL = os.getenv("RENDER_URL", "https://vapi-deployed-1.onrender.com")
-INTERVAL = 10 * 3  # 10 minutes
+INTERVAL = 10 * 3  # 30 seconds for testing, change to 10 * 60 for production
 
 def ping():
     url = f"{RENDER_URL}/health"
