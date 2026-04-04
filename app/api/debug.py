@@ -1,8 +1,9 @@
+import os
 import re
 import httpx
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import (
     TEBRA_URL, CUSTOMER_KEY, TEBRA_PASSWORD, TEBRA_USER,
@@ -274,3 +275,18 @@ async def debug_location_providers():
             "providers":       list(providers_seen.values()),
         }
     return results
+
+
+@router.get("/logs")
+async def view_logs(lines: int = 300):
+    """Stream the last N lines of the tebra_debug.log file.
+    Usage: GET /logs          → last 300 lines
+           GET /logs?lines=500 → last 500 lines
+    """
+    log_path = "logs/tebra_debug.log"
+    if not os.path.exists(log_path):
+        return PlainTextResponse("Log file not found. No requests have been processed yet.")
+    with open(log_path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+    tail = all_lines[-lines:]
+    return PlainTextResponse("".join(tail))
