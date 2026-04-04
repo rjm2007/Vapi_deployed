@@ -58,7 +58,7 @@ def to_utc_string(date: str, h: int, mn: int) -> str:
 def generate_all_slots() -> list:
     """Return all valid 30-minute booking slots for a clinic day."""
     slots = []
-    for h in range(7, 20):
+    for h in range(7, 18):  # 7 AM to 5:30 PM last slot
         if h == 14:  # skip 2 PM–3 PM lunch
             continue
         for mn in [0, 30]:
@@ -144,5 +144,5 @@ def get_nearest_available_slots(requested_h: int, requested_mn: int,
 
 
 def is_valid_clinic_slot(h: int, mn: int) -> bool:
-    """Return True if the slot falls within open clinic hours (7 AM–8 PM, no 2–3 PM)."""
-    return 7 <= h < 20 and h != 14
+    """Return True if the slot falls within open clinic hours (7 AM–6 PM, no 2–3 PM)."""
+    return 7 <= h < 18 and h != 14
