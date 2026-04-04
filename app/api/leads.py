@@ -94,9 +94,13 @@ async def update_lead_status(request: Request):
             update_data["queue_status"]   = queue_status
         if lead_outcome:
             update_data["lead_outcome"]   = lead_outcome
-            # Auto-set queue_status for not_interested if VAPI didn't specify
-            if lead_outcome == "not_interested" and not queue_status:
-                update_data["queue_status"] = "not_interested"
+            # Auto-set queue_status if VAPI didn't specify one
+            if not queue_status:
+                if lead_outcome == "not_interested":
+                    update_data["queue_status"] = "not_interested"
+                elif lead_outcome == "no_answer":
+                    _new_att = (current_lead.get("call_attempts") or 0) + 1
+                    update_data["queue_status"] = "in_progress" if _new_att < 3 else "manual_follow_up"
         if callback_requested_at:
             update_data["callback_requested_at"] = callback_requested_at
         if callback_notes:
@@ -321,34 +325,15 @@ async def vapi_webhook(request: Request):
         old_attempts = lead.get("call_attempts") or 0
         new_attempts = old_attempts + 1
 
-        # ── Smart fallback: check if an appointment was created ──
-        has_appointment = False
-        if ended_reason in ("customer-ended-call", "assistant-ended-call"):
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    appt_r = await client.get(
-                        f"{SUPABASE_URL}/rest/v1/appointments?lead_id=eq.{lead_id}"
-                        f"&status=eq.scheduled&select=id&limit=1",
-                        headers=SUPABASE_HEADERS,
-                    )
-                    if appt_r.status_code == 200 and appt_r.json():
-                        has_appointment = True
-                        logger.info("[%s] vapi-webhook fallback — appointment found for lead %s, marking booked", rid, lead_id)
-            except Exception:
-                pass
-
-        if has_appointment:
-            queue_status = "complete"
-            lead_outcome = "booked"
-        elif ended_reason == "customer-did-not-answer":
-            queue_status = "new" if new_attempts < 3 else "manual_follow_up"
-            lead_outcome = "no_answer" if new_attempts < 3 else "manual"
+        if ended_reason == "customer-did-not-answer":
+            queue_status = "in_progress" if new_attempts < 3 else "manual_follow_up"
+            lead_outcome = "no_answer"
         elif ended_reason in ("customer-ended-call", "assistant-ended-call"):
             queue_status = "manual_follow_up"
             lead_outcome = "manual"
         else:
-            queue_status = "new" if new_attempts < 3 else "manual_follow_up"
-            lead_outcome = "no_answer" if new_attempts < 3 else "manual"
+            queue_status = "in_progress" if new_attempts < 3 else "manual_follow_up"
+            lead_outcome = "no_answer"
 
         update_data = {
             "queue_status":   queue_status,
