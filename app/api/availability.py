@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
@@ -70,8 +71,17 @@ async def check_availability(request: Request):
                 "I couldn't check availability for that date. Please give me the date in YYYY-MM-DD format, for example 2026-04-02."
             )
 
-        booked         = parse_booked_slots(xml_response, date)
-        available      = get_available_slots(booked)
+        booked    = parse_booked_slots(xml_response, date)
+        available = get_available_slots(booked)
+
+        # ── Filter out past slots when date is today (PDT) ──
+        pdt_now = datetime.now(timezone(timedelta(hours=-7)))
+        if date == pdt_now.strftime("%Y-%m-%d"):
+            available = [
+                (h, mn) for (h, mn) in available
+                if (h * 60 + mn) > (pdt_now.hour * 60 + pdt_now.minute)
+            ]
+
         requested_time = parse_time_to_24hr(time_str) if time_str else None
 
         if requested_time is None:
@@ -88,7 +98,7 @@ async def check_availability(request: Request):
             if not is_valid_clinic_slot(h, mn):
                 message = (
                     f"Sorry, {format_12hr(h, mn)} is outside clinic hours. "
-                    f"We're open 7:00 AM to 8:00 PM with a break from 2:00 PM to 3:00 PM."
+                    f"We're open 7:00 AM to 2:00 PM and 3:00 PM to 5:30 PM."
                 )
             elif (h, mn) not in booked:
                 message = (
